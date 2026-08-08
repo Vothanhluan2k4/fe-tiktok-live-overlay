@@ -17,7 +17,8 @@ import {
   Heart, 
   Share2,
   RefreshCw,
-  Zap
+  Zap,
+  LogIn
 } from 'lucide-react';
 
 export default function Dashboard({ overlayToken, setOverlayToken }) {
@@ -368,6 +369,7 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[
               { key: 'comment', label: 'Đọc bình luận (Chat)', icon: <MessageSquare size={16} color="#25f4ee" /> },
+              { key: 'member', label: 'Chào mừng người xem mới (Vào phòng)', icon: <LogIn size={16} color="#10b981" /> },
               { key: 'gift', label: 'Đọc quà tặng (Gifts)', icon: <Gift size={16} color="#fe2c55" /> },
               { key: 'follow', label: 'Đọc lượt theo dõi mới', icon: <UserPlus size={16} color="#a855f7" /> },
               { key: 'share', label: 'Đọc lượt chia sẻ live', icon: <Share2 size={16} color="#3b82f6" /> },
@@ -478,6 +480,9 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
             </button>
             <button className="btn-secondary" onClick={() => handleTriggerTest('follow')}>
               <UserPlus size={14} color="#a855f7" /> Test Follow
+            </button>
+            <button className="btn-secondary" onClick={() => handleTriggerTest('member')}>
+              <LogIn size={14} color="#10b981" /> Test Chào Mừng
             </button>
           </div>
         </div>

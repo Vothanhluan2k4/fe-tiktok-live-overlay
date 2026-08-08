@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import confetti from 'canvas-confetti';
-import { Volume2, Gift, MessageSquare, UserPlus, Heart, Share2, Radio } from 'lucide-react';
+import { Volume2, Gift, MessageSquare, UserPlus, Heart, Share2, Radio, LogIn } from 'lucide-react';
 
 export default function OverlayPage({ token: propToken }) {
   // Extract token from URL path (/overlay/TOKEN) or props
@@ -185,6 +185,7 @@ export default function OverlayPage({ token: propToken }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
             {currentEvent.type === 'comment' && <MessageSquare size={20} color="#25f4ee" />}
+            {currentEvent.type === 'member' && <LogIn size={20} color="#10b981" />}
             {currentEvent.type === 'gift' && <Gift size={24} color="#ffd700" className="animate-bounce" />}
             {currentEvent.type === 'follow' && <UserPlus size={20} color="#a855f7" />}
             {currentEvent.type === 'like' && <Heart size={20} color="#fe2c55" />}
