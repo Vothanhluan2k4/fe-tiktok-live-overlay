@@ -21,7 +21,8 @@ export default function OverlayPage({ token: propToken }) {
     document.body.classList.add('overlay-mode');
 
     // Connect to Socket.IO backend
-    const socket = io('http://localhost:5000');
+    const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const socket = io(serverUrl);
     socketRef.current = socket;
 
     socket.on('connect', () => {
