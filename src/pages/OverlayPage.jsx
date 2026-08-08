@@ -56,9 +56,20 @@ export default function OverlayPage({ token: propToken }) {
       processAudioQueue();
     });
 
+    // Auto unlock audio on any user interaction anywhere on screen
+    const handleInteraction = () => {
+      unlockAudio();
+    };
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('keydown', handleInteraction);
+    window.addEventListener('pointerdown', handleInteraction);
+
     return () => {
       document.body.classList.remove('overlay-mode');
       socket.disconnect();
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+      window.removeEventListener('pointerdown', handleInteraction);
     };
   }, [token]);
 
@@ -73,13 +84,21 @@ export default function OverlayPage({ token: propToken }) {
     setCurrentEvent(event);
 
     try {
+      let played = false;
       if (event.audioUrl) {
-        await playAudioUrl(event.audioUrl, event.volume ?? 1);
-      } else if (event.speechText && 'speechSynthesis' in window) {
+        try {
+          await playAudioUrl(event.audioUrl, event.volume ?? 1);
+          played = true;
+        } catch (err) {
+          console.warn('[Overlay Audio Engine] Audio URL playback failed, falling back to Web Speech:', err.message);
+        }
+      }
+
+      if (!played && event.speechText && 'speechSynthesis' in window) {
         await playWebSpeech(event.speechText, event.volume ?? 1);
       }
     } catch (err) {
-      console.warn('[Overlay Audio Error]:', err.message);
+      console.warn('[Overlay Audio Processing Error]:', err.message);
     } finally {
       // Small pause before playing next item
       setTimeout(() => {
@@ -99,18 +118,18 @@ export default function OverlayPage({ token: propToken }) {
   };
 
   const playAudioUrl = (url, volume) => {
-    return new Promise((resolve) => {
-      const audio = new Audio(url);
+    return new Promise((resolve, reject) => {
+      const audio = new Audio();
+      audio.src = url;
       audio.volume = Math.max(0, Math.min(1, volume));
+
       audio.onended = () => resolve();
-      audio.onerror = () => {
-        console.error('[Audio Engine] Sound URL failed to load:', url);
-        resolve();
-      };
-      audio.play().catch((e) => {
-        console.warn('[Audio Autoplay Blocked]: Click "Enable Audio" button in OBS preview.', e);
-        resolve();
-      });
+      audio.onerror = () => reject(new Error('Sound URL failed to load'));
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((e) => reject(e));
+      }
     });
   };
 
