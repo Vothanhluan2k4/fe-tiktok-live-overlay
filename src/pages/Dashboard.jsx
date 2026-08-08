@@ -45,7 +45,8 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
     blockedWords: ['đụ', 'dm', 'cl', 'vcl', 'dcm', 'chửi']
   });
 
-  const overlayUrl = `${window.location.origin}/overlay/${overlayToken}`;
+  const cleanToken = (overlayToken || 'demo-overlay-token').replace(/^\/+/, '');
+  const overlayUrl = `${window.location.origin}/overlay/${cleanToken}`;
 
   useEffect(() => {
     fetchConfig();
