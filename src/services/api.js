@@ -24,6 +24,13 @@ export const api = {
     return res.json();
   },
 
+  reloadOverlay: async (token) => {
+    const res = await fetch(`${API_BASE}/config/reload/${token}`, {
+      method: 'POST'
+    });
+    return res.json();
+  },
+
   // TikTok Live Connection APIs
   startConnection: async (overlayToken, tiktokUsername) => {
     const res = await fetch(`${API_BASE}/connection/start`, {

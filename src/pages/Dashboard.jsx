@@ -136,6 +136,14 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
     }
   };
 
+  const handleReloadOverlay = async () => {
+    try {
+      await api.reloadOverlay(overlayToken);
+    } catch (e) {
+      console.error('Reload overlay error', e);
+    }
+  };
+
   const handleAddBlockedWord = () => {
     if (!newWord.trim()) return;
     const word = newWord.trim().toLowerCase();
@@ -270,7 +278,7 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <a 
               href={overlayUrl} 
               target="_blank" 
@@ -278,14 +286,22 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
               className="btn-secondary"
               style={{ textDecoration: 'none', fontSize: '0.85rem' }}
             >
-              <ExternalLink size={16} /> Mở tab Overlay xem thử
+              <ExternalLink size={16} /> Mở tab Overlay
             </a>
+            <button 
+              className="btn-secondary"
+              onClick={handleReloadOverlay}
+              style={{ fontSize: '0.85rem' }}
+              title="Gửi lệnh buộc OBS Overlay tự tải lại trang"
+            >
+              <RefreshCw size={16} /> Tải lại Overlay
+            </button>
             <button 
               className="btn-secondary"
               onClick={handleGenerateNewToken}
               style={{ fontSize: '0.85rem' }}
             >
-              <RefreshCw size={16} /> Đổi Token mới
+              Đổi Token
             </button>
           </div>
         </div>

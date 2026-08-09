@@ -1,7 +1,19 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import confetti from 'canvas-confetti';
-import { Volume2, Gift, MessageSquare, UserPlus, Heart, Share2, Radio, LogIn } from 'lucide-react';
+import { api } from '../services/api';
+import { 
+  Volume2, 
+  Gift, 
+  MessageSquare, 
+  UserPlus, 
+  Heart, 
+  Share2, 
+  LogIn, 
+  VolumeX,
+  Sparkles,
+  RefreshCw
+} from 'lucide-react';
 
 export default function OverlayPage({ token: propToken }) {
   // Extract token from URL path (/overlay/TOKEN) or props
@@ -11,10 +23,22 @@ export default function OverlayPage({ token: propToken }) {
   const [audioReady, setAudioReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [recentLog, setRecentLog] = useState([]);
+  const [overlayConfig, setOverlayConfig] = useState(null);
+  const [syncNotice, setSyncNotice] = useState(null);
 
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
   const socketRef = useRef(null);
+  const chatContainerRef = useRef(null);
+
+  useEffect(() => {
+    // Fetch initial config
+    api.getConfig(token).then((res) => {
+      if (res.success && res.config) {
+        setOverlayConfig(res.config);
+      }
+    }).catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     // Add overlay-mode class to body for full transparency
@@ -33,13 +57,30 @@ export default function OverlayPage({ token: propToken }) {
 
     socket.on('connection_status', (data) => {
       setConnectionStatus(data.status);
+      if (data.config) {
+        setOverlayConfig(data.config);
+      }
+    });
+
+    socket.on('config_updated', (data) => {
+      console.log('[Overlay] Realtime config updated:', data.config);
+      if (data.config) {
+        setOverlayConfig(data.config);
+        setSyncNotice('⚡ Cấu hình Overlay đã tự động cập nhật!');
+        setTimeout(() => setSyncNotice(null), 3500);
+      }
+    });
+
+    socket.on('reload_overlay', () => {
+      console.log('[Overlay] Reloading overlay window...');
+      window.location.reload();
     });
 
     socket.on('live_event', (eventData) => {
       console.log('[Overlay] Received event:', eventData);
 
-      // Add to visual history
-      setRecentLog((prev) => [eventData, ...prev.slice(0, 4)]);
+      // Add to visual history - NEWEST AT THE BOTTOM (like YouTube Chat)
+      setRecentLog((prev) => [...prev.slice(-9), eventData]);
 
       // Trigger Confetti on Gifts
       if (eventData.type === 'gift') {
@@ -74,6 +115,13 @@ export default function OverlayPage({ token: propToken }) {
     };
   }, [token]);
 
+  // Scroll to bottom whenever recentLog updates
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [recentLog, currentEvent]);
+
   // Audio Queue Processor
   const processAudioQueue = async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
@@ -107,14 +155,14 @@ export default function OverlayPage({ token: propToken }) {
         if (audioQueueRef.current.length > 0) {
           processAudioQueue();
         } else {
-          // Hide badge after idle timeout
+          // Hide active badge highlight after idle timeout
           setTimeout(() => {
             if (audioQueueRef.current.length === 0) {
               setCurrentEvent(null);
             }
-          }, 3500);
+          }, 3000);
         }
-      }, 500);
+      }, 400);
     }
   };
 
@@ -136,7 +184,7 @@ export default function OverlayPage({ token: propToken }) {
 
   const playWebSpeech = (text, volume) => {
     return new Promise((resolve) => {
-      window.speechSynthesis.cancel(); // Reset active speech
+      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'vi-VN';
       utterance.volume = Math.max(0, Math.min(1, volume));
@@ -150,17 +198,73 @@ export default function OverlayPage({ token: propToken }) {
   };
 
   const unlockAudio = () => {
-    // Play a silent audio buffer to unlock browser audio context
     const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
     audio.play().then(() => {
       setAudioReady(true);
     }).catch(() => setAudioReady(true));
   };
 
+  // Helper to render user avatar or fallback initial
+  const renderAvatar = (item) => {
+    if (item.avatar) {
+      return (
+        <img 
+          src={item.avatar} 
+          alt={item.user} 
+          style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(255,255,255,0.2)' }}
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
+      );
+    }
+    const initial = (item.user || '?').charAt(0).toUpperCase();
+    return (
+      <div style={{
+        width: 34,
+        height: 34,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 800,
+        fontSize: '0.9rem',
+        border: '1.5px solid rgba(255,255,255,0.2)'
+      }}>
+        {initial}
+      </div>
+    );
+  };
+
   return (
     <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
       
-      {/* OBS Audio Autoplay Unlock Prompt (Shows if user hasn't clicked canvas yet) */}
+      {/* Realtime Config Sync Notice */}
+      {syncNotice && (
+        <div style={{ 
+          position: 'absolute', 
+          top: 20, 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          pointerEvents: 'none', 
+          zIndex: 9999,
+          background: 'linear-gradient(135deg, #25f4ee, #8b5cf6)',
+          color: '#000',
+          padding: '8px 18px',
+          borderRadius: 20,
+          fontWeight: 800,
+          fontSize: '0.85rem',
+          boxShadow: '0 4px 20px rgba(37, 244, 238, 0.5)',
+          animation: 'youtubeSlideIn 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6
+        }}>
+          <Sparkles size={16} /> {syncNotice}
+        </div>
+      )}
+
+      {/* OBS Audio Autoplay Unlock Prompt */}
       {!audioReady && (
         <div style={{ position: 'absolute', top: 20, right: 20, pointerEvents: 'auto', zIndex: 9999 }}>
           <button 
@@ -184,79 +288,207 @@ export default function OverlayPage({ token: propToken }) {
         </div>
       )}
 
-      {/* Active Speech / Event Visual Badge */}
-      {currentEvent && (
-        <div 
-          style={{
-            maxWidth: 480,
-            background: currentEvent.type === 'gift' 
-              ? 'linear-gradient(135deg, rgba(254, 44, 85, 0.95), rgba(139, 92, 246, 0.95))'
-              : 'rgba(15, 17, 26, 0.92)',
-            backdropFilter: 'blur(16px)',
-            border: currentEvent.type === 'gift' ? '2px solid #25f4ee' : '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: 20,
-            padding: '16px 20px',
-            color: '#fff',
-            boxShadow: currentEvent.type === 'gift' ? '0 10px 40px rgba(254, 44, 85, 0.6)' : '0 10px 30px rgba(0,0,0,0.5)',
-            transform: 'translateY(0)',
-            animation: 'slideUp 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-            marginBottom: 16
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            {currentEvent.type === 'comment' && <MessageSquare size={20} color="#25f4ee" />}
-            {currentEvent.type === 'member' && <LogIn size={20} color="#10b981" />}
-            {currentEvent.type === 'gift' && <Gift size={24} color="#ffd700" className="animate-bounce" />}
-            {currentEvent.type === 'follow' && <UserPlus size={20} color="#a855f7" />}
-            {currentEvent.type === 'like' && <Heart size={20} color="#fe2c55" />}
-            {currentEvent.type === 'share' && <Share2 size={20} color="#3b82f6" />}
+      {/* YOUTUBE LIVE CHAT STYLE OVERLAY FEED (Newest messages at the BOTTOM) */}
+      <div 
+        ref={chatContainerRef}
+        style={{
+          maxWidth: 440,
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          gap: 10,
+          maxHeight: '80vh',
+          overflowY: 'hidden',
+          paddingBottom: 8
+        }}
+      >
+        {recentLog.map((item) => {
+          const isSpeaking = currentEvent?.id === item.id;
+          const isGift = item.type === 'gift';
 
-            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: currentEvent.type === 'gift' ? '#fff' : '#f8fafc' }}>
-              {currentEvent.user}
-            </span>
+          if (isGift) {
+            // YouTube SuperChat Style Card for Gifts
+            return (
+              <div
+                key={item.id}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(234, 88, 12, 0.95), rgba(225, 29, 72, 0.95))',
+                  backdropFilter: 'blur(16px)',
+                  borderRadius: 16,
+                  padding: 0,
+                  overflow: 'hidden',
+                  color: '#fff',
+                  boxShadow: isSpeaking 
+                    ? '0 8px 30px rgba(249, 115, 22, 0.7), 0 0 0 2px #ffd700' 
+                    : '0 6px 24px rgba(0, 0, 0, 0.4)',
+                  animation: 'youtubeSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {/* SuperChat Header */}
+                <div style={{
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.15)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {renderAvatar(item)}
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>
+                        {item.user}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#fef08a', fontWeight: 600 }}>
+                        Đã tặng {item.giftName} x{item.repeatCount || 1}
+                      </div>
+                    </div>
+                  </div>
 
-            {currentEvent.type === 'gift' && (
-              <span style={{ background: '#ffd700', color: '#000', padding: '2px 8px', borderRadius: 12, fontWeight: 800, fontSize: '0.8rem' }}>
-                GIFT
-              </span>
-            )}
-          </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {isSpeaking && (
+                      <span style={{ 
+                        background: '#ffd700', 
+                        color: '#000', 
+                        fontSize: '0.72rem', 
+                        fontWeight: 800, 
+                        padding: '2px 8px', 
+                        borderRadius: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}>
+                        <Volume2 size={12} className="animate-pulse" /> ĐANG ĐỌC
+                      </span>
+                    )}
+                    <Gift size={22} color="#ffd700" />
+                  </div>
+                </div>
 
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: currentEvent.type === 'gift' ? '#fff' : '#e2e8f0', lineHeight: 1.4 }}>
-            {currentEvent.text || currentEvent.speechText}
-          </div>
-        </div>
-      )}
+                {/* SuperChat Body */}
+                <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {item.giftPictureUrl && (
+                    <img 
+                      src={item.giftPictureUrl} 
+                      alt={item.giftName} 
+                      style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.3, color: '#fff' }}>
+                    {item.text || item.speechText}
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
-      {/* Mini Recent Log Feed */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, opacity: 0.85 }}>
-        {recentLog.slice(0, 3).map((item) => (
-          <div 
-            key={item.id} 
-            style={{ 
-              background: 'rgba(0, 0, 0, 0.4)', 
-              borderRadius: 10, 
-              padding: '6px 12px', 
-              fontSize: '0.82rem', 
-              color: '#cbd5e1',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              backdropFilter: 'blur(4px)'
-            }}
-          >
-            <span style={{ color: '#25f4ee', fontWeight: 700 }}>{item.user}:</span>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text || item.speechText}</span>
-          </div>
-        ))}
+          // YouTube Live Chat Bubble style for Comments & other events
+          return (
+            <div
+              key={item.id}
+              style={{
+                background: isSpeaking 
+                  ? 'rgba(20, 24, 40, 0.96)' 
+                  : 'rgba(15, 17, 26, 0.82)',
+                backdropFilter: 'blur(12px)',
+                border: isSpeaking 
+                  ? '1.5px solid #25f4ee' 
+                  : '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 14,
+                padding: '10px 14px',
+                color: '#fff',
+                boxShadow: isSpeaking 
+                  ? '0 4px 20px rgba(37, 244, 238, 0.35)' 
+                  : '0 4px 16px rgba(0, 0, 0, 0.3)',
+                animation: 'youtubeSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {renderAvatar(item)}
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ 
+                    fontWeight: 700, 
+                    fontSize: '0.9rem', 
+                    color: item.type === 'comment' ? '#25f4ee' : item.type === 'follow' ? '#c084fc' : '#38bdf8',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {item.user}
+                  </span>
+
+                  {item.type === 'follow' && (
+                    <span style={{ background: 'rgba(168, 85, 247, 0.25)', color: '#d8b4fe', fontSize: '0.7rem', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                      Follower
+                    </span>
+                  )}
+                  {item.type === 'member' && (
+                    <span style={{ background: 'rgba(16, 185, 129, 0.25)', color: '#6ee7b7', fontSize: '0.7rem', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                      Member
+                    </span>
+                  )}
+                  {item.type === 'like' && (
+                    <span style={{ background: 'rgba(254, 44, 85, 0.25)', color: '#fda4af', fontSize: '0.7rem', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                      Thả tim
+                    </span>
+                  )}
+                  {item.type === 'share' && (
+                    <span style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', fontSize: '0.7rem', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                      Chia sẻ
+                    </span>
+                  )}
+
+                  {isSpeaking && (
+                    <span style={{ 
+                      marginLeft: 'auto',
+                      color: '#25f4ee', 
+                      fontSize: '0.72rem', 
+                      fontWeight: 700, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 4 
+                    }}>
+                      <Volume2 size={12} className="animate-pulse" /> TTS
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ 
+                  fontSize: '0.92rem', 
+                  fontWeight: 500, 
+                  color: '#f1f5f9', 
+                  lineHeight: 1.4,
+                  wordBreak: 'break-word' 
+                }}>
+                  {item.text || item.speechText}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <style>{`
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(30px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes youtubeSlideIn {
+          0% {
+            opacity: 0;
+            transform: translateY(24px) scale(0.96);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
       `}</style>
     </div>
   );
 }
+
