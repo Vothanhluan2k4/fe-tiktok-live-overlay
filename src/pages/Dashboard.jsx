@@ -18,7 +18,9 @@ import {
   Share2,
   RefreshCw,
   Zap,
-  LogIn
+  LogIn,
+  Smartphone,
+  KeyRound
 } from 'lucide-react';
 
 export default function Dashboard({ overlayToken, setOverlayToken }) {
@@ -26,6 +28,7 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
   const [connectionState, setConnectionState] = useState({ status: 'disconnected', stats: { comments: 0, gifts: 0, follows: 0, likes: 0 } });
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedRemote, setCopiedRemote] = useState(false);
   const [newWord, setNewWord] = useState('');
 
   // Configuration state
@@ -40,13 +43,23 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
       gift: true,
       follow: true,
       like: false,
-      share: true
+      share: true,
+      member: true
     },
-    blockedWords: ['đụ', 'dm', 'cl', 'vcl', 'dcm', 'chửi']
+    templates: {
+      comment: '{nickname} nói: {text}',
+      gift: 'Cảm ơn {nickname} đã tặng {count} {giftName}',
+      follow: 'Cảm ơn {nickname} đã theo dõi kênh',
+      like: '{nickname} đã thả tim',
+      share: 'Cảm ơn {nickname} đã chia sẻ buổi live',
+      member: 'Chào mừng {nickname} đã vào phòng live'
+    },
+    blockedWords: ['đụ', 'đám', 'dm', 'cl', 'vcl', 'dcm', 'chửi', 'lừa đảo']
   });
 
   const cleanToken = (overlayToken || 'demo-overlay-token').replace(/^\/+/, '');
   const overlayUrl = `${window.location.origin}/overlay/${cleanToken}`;
+  const dashboardRemoteUrl = `${window.location.origin}/?token=${cleanToken}`;
 
   useEffect(() => {
     fetchConfig();
@@ -76,7 +89,7 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
       if (data.success) {
         setConnectionState(data);
       }
-    } catch (e) {}
+    } catch {}
   };
 
   const handleSaveConfig = async (newConfigData) => {
@@ -114,7 +127,7 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
     try {
       await api.stopConnection(overlayToken);
       fetchStatus();
-    } catch (e) {
+    } catch {
       alert('Lỗi ngắt kết nối');
     } finally {
       setLoading(false);
@@ -127,12 +140,25 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyRemoteUrl = () => {
+    navigator.clipboard.writeText(dashboardRemoteUrl);
+    setCopiedRemote(true);
+    setTimeout(() => setCopiedRemote(false), 2000);
+  };
+
   const handleGenerateNewToken = async () => {
-    if (confirm('Tạo URL Overlay mới? Bạn sẽ cần dán lại URL mới vào OBS Studio.')) {
+    if (confirm('Tạo phòng Streamer mới? Bạn sẽ nhận một mã Token và link OBS hoàn toàn riêng biệt.')) {
       const res = await api.generateToken();
-      if (res.success) {
+      if (res.success && res.overlayToken) {
         setOverlayToken(res.overlayToken);
       }
+    }
+  };
+
+  const handleSwitchCustomToken = () => {
+    const inputToken = prompt('Nhập mã phòng Streamer bạn muốn kết nối (ví dụ: streamer_abc123):', cleanToken);
+    if (inputToken && inputToken.trim() && inputToken.trim() !== cleanToken) {
+      setOverlayToken(inputToken.trim());
     }
   };
 
@@ -186,12 +212,20 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
           </p>
         </div>
 
-        {/* Status Badge */}
-        <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, borderRadius: 30 }}>
-          <div className={connectionState.status === 'connected' ? 'pulse-live' : 'pulse-offline'} />
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: connectionState.status === 'connected' ? '#4ade80' : '#cbd5e1' }}>
-            {connectionState.status === 'connected' ? `ĐANG LIVE: @${connectionState.username}` : connectionState.status === 'connecting' ? 'Đang kết nối...' : 'CHƯA KẾT NỐI'}
-          </span>
+        {/* Status Badge & Room Token Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="glass-panel" style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, fontSize: '0.82rem' }}>
+            <KeyRound size={14} color="#a855f7" />
+            <span style={{ color: 'var(--text-dim)' }}>Mã phòng:</span>
+            <span style={{ fontWeight: 700, color: '#25f4ee', fontFamily: 'var(--font-mono)' }}>{cleanToken}</span>
+          </div>
+
+          <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, borderRadius: 30 }}>
+            <div className={connectionState.status === 'connected' ? 'pulse-live' : 'pulse-offline'} />
+            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: connectionState.status === 'connected' ? '#4ade80' : '#cbd5e1' }}>
+              {connectionState.status === 'connected' ? `ĐANG LIVE: @${connectionState.username}` : connectionState.status === 'connecting' ? 'Đang kết nối...' : 'CHƯA KẾT NỐI'}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -255,16 +289,21 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
 
         {/* OBS Overlay Link Card */}
         <div className="glass-panel" style={{ padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <Sparkles color="#25f4ee" size={22} />
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Đường dẫn OBS Overlay</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Sparkles color="#25f4ee" size={22} />
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Đường dẫn OBS Overlay</h2>
+            </div>
+            <span style={{ fontSize: '0.72rem', background: 'rgba(37, 244, 238, 0.15)', color: '#25f4ee', padding: '3px 8px', borderRadius: 8, fontWeight: 700, border: '1px solid rgba(37, 244, 238, 0.3)' }}>
+              Phòng riêng biệt
+            </span>
           </div>
 
-          <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
             Dán đường dẫn này vào <b>Browser Source</b> trong OBS Studio hoặc TikTok LIVE Studio:
           </p>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             <input 
               type="text" 
               className="glass-input" 
@@ -278,30 +317,48 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <a 
               href={overlayUrl} 
               target="_blank" 
               rel="noreferrer" 
               className="btn-secondary"
-              style={{ textDecoration: 'none', fontSize: '0.85rem' }}
+              style={{ textDecoration: 'none', fontSize: '0.82rem' }}
             >
-              <ExternalLink size={16} /> Mở tab Overlay
+              <ExternalLink size={15} /> Mở tab Overlay
             </a>
             <button 
               className="btn-secondary"
+              onClick={handleCopyRemoteUrl}
+              style={{ fontSize: '0.82rem' }}
+              title="Sao chép link Dashboard để mở trên điện thoại"
+            >
+              {copiedRemote ? <Check size={15} color="#4ade80" /> : <Smartphone size={15} />}
+              {copiedRemote ? 'Đã copy link điện thoại!' : 'Link cho Điện thoại'}
+            </button>
+            <button 
+              className="btn-secondary"
               onClick={handleReloadOverlay}
-              style={{ fontSize: '0.85rem' }}
+              style={{ fontSize: '0.82rem' }}
               title="Gửi lệnh buộc OBS Overlay tự tải lại trang"
             >
-              <RefreshCw size={16} /> Tải lại Overlay
+              <RefreshCw size={15} /> Tải lại Overlay
             </button>
             <button 
               className="btn-secondary"
               onClick={handleGenerateNewToken}
-              style={{ fontSize: '0.85rem' }}
+              style={{ fontSize: '0.82rem' }}
+              title="Tạo mã phòng mới ngẫu nhiên"
             >
-              Đổi Token
+              Tạo phòng mới
+            </button>
+            <button 
+              className="btn-secondary"
+              onClick={handleSwitchCustomToken}
+              style={{ fontSize: '0.82rem' }}
+              title="Nhập mã phòng đã có sẵn từ thiết bị khác"
+            >
+              <KeyRound size={15} /> Nhập mã phòng
             </button>
           </div>
         </div>
@@ -331,20 +388,6 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
-                  Ngôn ngữ
-                </label>
-                <select 
-                  className="glass-input"
-                  value={config.language}
-                  onChange={(e) => handleSaveConfig({ language: e.target.value })}
-                >
-                  <option value="vi" style={{ background: '#12141d' }}>Tiếng Việt (VN)</option>
-                  <option value="en" style={{ background: '#12141d' }}>Tiếng Anh (EN)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
                   Tốc độ đọc
                 </label>
                 <select 
@@ -356,85 +399,167 @@ export default function Dashboard({ overlayToken, setOverlayToken }) {
                   <option value="slow" style={{ background: '#12141d' }}>Chậm (0.8x)</option>
                 </select>
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
+                  Âm lượng ({Math.round(config.volume * 100)}%)
+                </label>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1" 
+                  step="0.1" 
+                  value={config.volume}
+                  onChange={(e) => handleSaveConfig({ volume: parseFloat(e.target.value) })}
+                  style={{ width: '100%', marginTop: 8 }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Events Trigger Settings */}
+        <div className="glass-panel" style={{ padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <Sliders color="#38bdf8" size={22} />
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Tùy chọn Sự kiện đọc</h2>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.comment}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, comment: e.target.checked } })}
+              />
+              <span>Bình luận (Chat)</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.gift}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, gift: e.target.checked } })}
+              />
+              <span>Tặng quà (Gift)</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.follow}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, follow: e.target.checked } })}
+              />
+              <span>Follow mới</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.member}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, member: e.target.checked } })}
+              />
+              <span>Người vào phòng</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.share}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, share: e.target.checked } })}
+              />
+              <span>Chia sẻ Live</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input 
+                type="checkbox" 
+                checked={config.eventsEnabled?.like}
+                onChange={(e) => handleSaveConfig({ eventsEnabled: { ...config.eventsEnabled, like: e.target.checked } })}
+              />
+              <span>Thả tim (Like)</span>
+            </label>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
+              Ngưỡng quà tối thiểu để đọc (Xu)
+            </label>
+            <input 
+              type="number" 
+              className="glass-input" 
+              value={config.giftMinValue || 0}
+              onChange={(e) => handleSaveConfig({ giftMinValue: parseInt(e.target.value) || 0 })}
+            />
+          </div>
+        </div>
+
+        {/* Speech Templates Customization */}
+        <div className="glass-panel" style={{ padding: 24, gridColumn: 'span 1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <Sparkles color="#f59e0b" size={22} />
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Mẫu câu đọc tiếng Việt</h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                Bình luận: <code>{'{nickname}'}</code>, <code>{'{text}'}</code>
+              </label>
+              <input 
+                type="text" 
+                className="glass-input" 
+                value={config.templates?.comment || ''} 
+                onChange={(e) => handleSaveConfig({ templates: { ...config.templates, comment: e.target.value } })}
+              />
             </div>
 
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                <span>Âm lượng đọc OBS</span>
-                <span>{Math.round((config.volume ?? 1) * 100)}%</span>
-              </div>
-              <input 
-                type="range" 
-                min="0" 
-                max="1" 
-                step="0.05" 
-                value={config.volume ?? 1}
-                onChange={(e) => handleSaveConfig({ volume: parseFloat(e.target.value) })}
-                style={{ width: '100%', accentColor: '#8b5cf6' }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Event Rules & Gift Filters */}
-        <div className="glass-panel" style={{ padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <Sliders color="#f59e0b" size={22} />
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Bật/Tắt Sự kiện & Lọc Quà</h2>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
-              { key: 'comment', label: 'Đọc bình luận (Chat)', icon: <MessageSquare size={16} color="#25f4ee" /> },
-              { key: 'member', label: 'Chào mừng người xem mới (Vào phòng)', icon: <LogIn size={16} color="#10b981" /> },
-              { key: 'gift', label: 'Đọc quà tặng (Gifts)', icon: <Gift size={16} color="#fe2c55" /> },
-              { key: 'follow', label: 'Đọc lượt theo dõi mới', icon: <UserPlus size={16} color="#a855f7" /> },
-              { key: 'share', label: 'Đọc lượt chia sẻ live', icon: <Share2 size={16} color="#3b82f6" /> },
-              { key: 'like', label: 'Đọc lượt thả tim (Likes)', icon: <Heart size={16} color="#ef4444" /> }
-            ].map(item => (
-              <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.9rem', fontWeight: 600 }}>
-                  {item.icon}
-                  {item.label}
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={!!config.eventsEnabled?.[item.key]}
-                    onChange={(e) => {
-                      const updatedEvents = { ...config.eventsEnabled, [item.key]: e.target.checked };
-                      handleSaveConfig({ eventsEnabled: updatedEvents });
-                    }}
-                  />
-                  <span className="slider" />
-                </label>
-              </div>
-            ))}
-
-            <div style={{ borderTop: '1px solid var(--border-light)', pt: 12, marginTop: 8 }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
-                Ngưỡng giá trị Gift đọc (chỉ đọc quà từ X Xu trở lên)
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                Tặng quà: <code>{'{nickname}'}</code>, <code>{'{count}'}</code>, <code>{'{giftName}'}</code>
               </label>
               <input 
-                type="number" 
-                className="glass-input"
-                min="0"
-                value={config.giftMinValue || 0}
-                onChange={(e) => handleSaveConfig({ giftMinValue: parseInt(e.target.value) || 0 })}
-                placeholder="Nhập số xu tối thiểu (VD: 5 xu)"
+                type="text" 
+                className="glass-input" 
+                value={config.templates?.gift || ''} 
+                onChange={(e) => handleSaveConfig({ templates: { ...config.templates, gift: e.target.value } })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                Follow mới: <code>{'{nickname}'}</code>
+              </label>
+              <input 
+                type="text" 
+                className="glass-input" 
+                value={config.templates?.follow || ''} 
+                onChange={(e) => handleSaveConfig({ templates: { ...config.templates, follow: e.target.value } })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                Chào mừng vào phòng: <code>{'{nickname}'}</code>
+              </label>
+              <input 
+                type="text" 
+                className="glass-input" 
+                value={config.templates?.member || ''} 
+                onChange={(e) => handleSaveConfig({ templates: { ...config.templates, member: e.target.value } })}
               />
             </div>
           </div>
         </div>
 
-        {/* Sensitive Words Blacklist */}
+        {/* Blocked Words Filter */}
         <div className="glass-panel" style={{ padding: 24, gridColumn: 'span 1' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <ShieldAlert color="#ef4444" size={22} />
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Lọc từ nhạy cảm / Spam</h2>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Bộ lọc từ cấm / Nhạy cảm</h2>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <input 
               type="text" 
               className="glass-input" 

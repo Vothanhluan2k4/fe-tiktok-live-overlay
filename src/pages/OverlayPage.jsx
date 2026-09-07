@@ -5,25 +5,31 @@ import { api } from '../services/api';
 import { 
   Volume2, 
   Gift, 
-  MessageSquare, 
-  UserPlus, 
-  Heart, 
-  Share2, 
-  LogIn, 
-  VolumeX,
-  Sparkles,
-  RefreshCw
+  Sparkles
 } from 'lucide-react';
 
 export default function OverlayPage({ token: propToken }) {
-  // Extract token from URL path (/overlay/TOKEN) or props
-  const token = propToken || window.location.pathname.split('/overlay/')[1] || 'demo-overlay-token';
+  // Extract token with priority: props -> pathname (/overlay/:token) -> query param (?token=...)
+  const extractToken = () => {
+    if (propToken && propToken.trim()) return propToken.trim();
+    const parts = window.location.pathname.split('/overlay/');
+    if (parts[1]) {
+      const clean = parts[1].split('/')[0].split('?')[0].trim();
+      if (clean) return clean;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const qToken = params.get('token');
+    if (qToken && qToken.trim()) return qToken.trim();
+    return 'demo-overlay-token';
+  };
+
+  const token = extractToken();
 
   const [currentEvent, setCurrentEvent] = useState(null);
   const [audioReady, setAudioReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const [recentLog, setRecentLog] = useState([]);
   const [overlayConfig, setOverlayConfig] = useState(null);
+  const [recentLog, setRecentLog] = useState([]);
   const [syncNotice, setSyncNotice] = useState(null);
 
   const audioQueueRef = useRef([]);
@@ -90,7 +96,7 @@ export default function OverlayPage({ token: propToken }) {
             spread: 70,
             origin: { y: 0.8 }
           });
-        } catch (e) {}
+        } catch {}
       }
 
       // Enqueue Audio
@@ -134,9 +140,11 @@ export default function OverlayPage({ token: propToken }) {
 
     try {
       let played = false;
+      const targetVolume = event.volume ?? overlayConfig?.volume ?? 1;
+
       if (event.audioUrl) {
         try {
-          await playAudioUrl(event.audioUrl, event.volume ?? 1);
+          await playAudioUrl(event.audioUrl, targetVolume);
           played = true;
         } catch (err) {
           console.warn('[Overlay Audio Engine] Audio URL playback failed, falling back to Web Speech:', err.message);
@@ -144,7 +152,7 @@ export default function OverlayPage({ token: propToken }) {
       }
 
       if (!played && event.speechText && 'speechSynthesis' in window) {
-        await playWebSpeech(event.speechText, event.volume ?? 1);
+        await playWebSpeech(event.speechText, targetVolume);
       }
     } catch (err) {
       console.warn('[Overlay Audio Processing Error]:', err.message);
@@ -155,7 +163,6 @@ export default function OverlayPage({ token: propToken }) {
         if (audioQueueRef.current.length > 0) {
           processAudioQueue();
         } else {
-          // Hide active badge highlight after idle timeout
           setTimeout(() => {
             if (audioQueueRef.current.length === 0) {
               setCurrentEvent(null);
@@ -239,6 +246,13 @@ export default function OverlayPage({ token: propToken }) {
   return (
     <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
       
+      {/* Offline Indicator */}
+      {connectionStatus === 'disconnected' && (
+        <div style={{ position: 'absolute', top: 20, left: 20, background: 'rgba(239, 68, 68, 0.85)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, pointerEvents: 'none', zIndex: 9999 }}>
+          Mất kết nối Live
+        </div>
+      )}
+
       {/* Realtime Config Sync Notice */}
       {syncNotice && (
         <div style={{ 
@@ -372,7 +386,7 @@ export default function OverlayPage({ token: propToken }) {
                   {item.giftPictureUrl && (
                     <img 
                       src={item.giftPictureUrl} 
-                      alt={item.giftName} 
+                      alt={item.giftName}
                       style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }}
                       onError={(e) => { e.target.style.display = 'none'; }}
                     />
@@ -385,18 +399,14 @@ export default function OverlayPage({ token: propToken }) {
             );
           }
 
-          // YouTube Live Chat Bubble style for Comments & other events
+          // Regular YouTube Chat Bubble Layout
           return (
             <div
               key={item.id}
               style={{
-                background: isSpeaking 
-                  ? 'rgba(20, 24, 40, 0.96)' 
-                  : 'rgba(15, 17, 26, 0.82)',
+                background: isSpeaking ? 'rgba(20, 24, 40, 0.96)' : 'rgba(15, 17, 26, 0.82)',
                 backdropFilter: 'blur(12px)',
-                border: isSpeaking 
-                  ? '1.5px solid #25f4ee' 
-                  : '1px solid rgba(255, 255, 255, 0.1)',
+                border: isSpeaking ? '1.5px solid #25f4ee' : '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: 14,
                 padding: '10px 14px',
                 color: '#fff',
@@ -413,6 +423,7 @@ export default function OverlayPage({ token: propToken }) {
               {renderAvatar(item)}
 
               <div style={{ flex: 1, minWidth: 0 }}>
+                {/* User Row with badges */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                   <span style={{ 
                     fontWeight: 700, 
@@ -447,27 +458,14 @@ export default function OverlayPage({ token: propToken }) {
                   )}
 
                   {isSpeaking && (
-                    <span style={{ 
-                      marginLeft: 'auto',
-                      color: '#25f4ee', 
-                      fontSize: '0.72rem', 
-                      fontWeight: 700, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 4 
-                    }}>
+                    <span style={{ marginLeft: 'auto', color: '#25f4ee', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Volume2 size={12} className="animate-pulse" /> TTS
                     </span>
                   )}
                 </div>
 
-                <div style={{ 
-                  fontSize: '0.92rem', 
-                  fontWeight: 500, 
-                  color: '#f1f5f9', 
-                  lineHeight: 1.4,
-                  wordBreak: 'break-word' 
-                }}>
+                {/* Message Content */}
+                <div style={{ fontSize: '0.92rem', fontWeight: 500, color: '#f1f5f9', lineHeight: 1.4, wordBreak: 'break-word' }}>
                   {item.text || item.speechText}
                 </div>
               </div>
@@ -478,11 +476,11 @@ export default function OverlayPage({ token: propToken }) {
 
       <style>{`
         @keyframes youtubeSlideIn {
-          0% {
+          from {
             opacity: 0;
-            transform: translateY(24px) scale(0.96);
+            transform: translateY(20px) scale(0.97);
           }
-          100% {
+          to {
             opacity: 1;
             transform: translateY(0) scale(1);
           }
@@ -491,4 +489,3 @@ export default function OverlayPage({ token: propToken }) {
     </div>
   );
 }
-
